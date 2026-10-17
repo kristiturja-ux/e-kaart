@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sulle on kiri!</title>
+
+  <!-- Käekirjafont (toetab eesti tähti õ, ä, ö, ü) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&display=swap" rel="stylesheet">
+
+  <!-- p5.js CDN-ist -->
+  <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+
+  <style>
+    :root {
+      /* polaroidi laius: telefonil suurem, madalal ekraanil piiratud kõrgusega */
+      --foto: min(clamp(120px, 34vw, 260px), 30vh);
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #1c1840;
+    }
+
+    /* p5.js lõuend täidab kogu akna */
+    #taust {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+    }
+    #taust canvas {
+      display: block;
+    }
+
+    /* Kaart (tekst + ümbrik) keskel; klõpsud lähevad mujal läbi lõuendile */
+    #kaart {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      animation: holju 5s ease-in-out infinite;
+    }
+
+    @keyframes holju {
+      0%, 100% { transform: translateY(0) rotate(-0.8deg); }
+      50%      { transform: translateY(-16px) rotate(0.8deg); }
+    }
+
+    .tervitus {
+      margin: 0 0 1.4rem;
+      font-family: 'Caveat', 'Segoe Script', 'Bradley Hand', cursive;
+      font-weight: 700;
+      font-size: clamp(2.6rem, 9vw, 5rem);
+      line-height: 1;
+      color: #fff;
+      text-align: center;
+      text-shadow: 0 2px 10px rgba(30, 20, 60, 0.55);
+      transition: opacity 0.4s ease;
+    }
+    #kaart.lahti .tervitus { opacity: 0; }
+
+    /* ===== Ümbrik (nupp) ===== */
+    #ymbrik {
+      position: relative;
+      width: min(78vw, 440px);
+      aspect-ratio: 3 / 2;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: pointer;
+      pointer-events: auto;
+      perspective: 900px;
+      filter: drop-shadow(0 18px 24px rgba(20, 15, 50, 0.45));
+      transition: transform 0.25s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #ymbrik:hover { transform: scale(1.04); }
+    #ymbrik:active { transform: scale(0.98); }
+    #ymbrik:focus-visible {
+      outline: 3px solid #fff;
+      outline-offset: 8px;
+      border-radius: 8px;
+    }
+
+    /* 1. samm: ümbrik raputab end */
+    #ymbrik.raputab {
+      animation: raputa 0.8s ease-in-out;
+    }
+    @keyframes raputa {
+      0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1.04); }
+      10%      { transform: translate(-9px, 0) rotate(-6deg) scale(1.04); }
+      20%      { transform: translate(9px, 2px) rotate(6deg) scale(1.04); }
+      30%      { transform: translate(-10px, -2px) rotate(-7deg) scale(1.05); }
+      40%      { transform: translate(10px, 2px) rotate(7deg) scale(1.05); }
+      50%      { transform: translate(-8px, 0) rotate(-6deg) scale(1.06); }
+      60%      { transform: translate(8px, 0) rotate(6deg) scale(1.06); }
+      70%      { transform: translate(-5px, 0) rotate(-3deg) scale(1.06); }
+      80%      { transform: translate(5px, 0) rotate(3deg) scale(1.05); }
+      90%      { transform: translate(-2px, 0) rotate(-1deg) scale(1.04); }
+    }
+
+    /* 3. samm: ümbrik plahvatab (konfetti võtab üle) */
+    #ymbrik.plahvatas {
+      animation: plahvata 0.28s ease-out forwards;
+      pointer-events: none;
+    }
+    @keyframes plahvata {
+      0%   { transform: scale(1.04); opacity: 1; }
+      35%  { transform: scale(1.4);  opacity: 1; }
+      100% { transform: scale(1.7);  opacity: 0; }
+    }
+
+    /* tagasipanek: ümbrik ilmub uuesti */
+    #ymbrik.tagasitulek {
+      animation: tagasitule 0.55s cubic-bezier(.2, 1.3, .4, 1);
+    }
+    @keyframes tagasitule {
+      0%   { transform: scale(0.4) rotate(-8deg); opacity: 0; }
+      60%  { opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    #ymbrik > span {
+      position: absolute;
+      display: block;
+    }
+
+    .tagak {
+      inset: 0;
+      background: #e6cf9f;
+      border-radius: 8px;
+    }
+
+    /* kiri, mis tuleb ümbriku avamisel välja piilumas */
+    .kiri {
+      left: 8%;
+      right: 8%;
+      top: 8%;
+      height: 82%;
+      z-index: 1;
+      background: #fffdf5;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.7s cubic-bezier(.3, 1.2, .4, 1) 0.35s;
+      font-family: 'Caveat', 'Segoe Script', 'Bradley Hand', cursive;
+      font-weight: 700;
+      font-size: clamp(1.8rem, 6vw, 3rem);
+      color: #5a3a2a;
+      text-align: center;
+      line-height: 1.1;
+      padding: 0 0.5em;
+      box-sizing: border-box;
+    }
+    #ymbrik.lahti .kiri { transform: translateY(-45%); }
+
+    /* ümbriku esikülje kolm kolmnurka */
+    .esi-vasak, .esi-parem, .esi-alumine {
+      inset: 0;
+      z-index: 2;
+      border-radius: 8px;
+    }
+    .esi-vasak   { background: #f2e0b8; clip-path: polygon(0 0, 52% 56%, 0 100%); }
+    .esi-parem   { background: #f2e0b8; clip-path: polygon(100% 0, 48% 56%, 100% 100%); }
+    .esi-alumine { background: #ecd7a8; clip-path: polygon(0 100%, 50% 44%, 100% 100%); }
+
+    /* klapp, mis avamisel üles keerub */
+    .klapp {
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 56%;
+      z-index: 3;
+      background: #dcc28f;
+      clip-path: polygon(0 0, 100% 0, 50% 100%);
+      border-radius: 8px 8px 0 0;
+      transform-origin: top center;
+      transition: transform 0.6s ease, z-index 0s linear 0.3s;
+    }
+    #ymbrik.lahti .klapp {
+      transform: rotateX(180deg);
+      z-index: 0;
+    }
+
+    /* punane vahapitsat */
+    .pitsat {
+      left: 50%;
+      top: 53%;
+      width: 15%;
+      aspect-ratio: 1;
+      z-index: 4;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #e8514a, #a8201c);
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+      color: rgba(255, 255, 255, 0.85);
+      font-size: clamp(0.9rem, 3vw, 1.5rem);
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.3s ease;
+    }
+    #ymbrik.lahti .pitsat { opacity: 0; }
+
+    /* ===== Konfetti (oma lõuend ümbriku ja piltide kohal) ===== */
+    #konfetti {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 4;
+      pointer-events: none;
+    }
+
+    /* ===== Polaroidid ===== */
+    .polaroid {
+      position: fixed;
+      z-index: 3;
+      width: var(--foto);
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: pointer;
+      transform: rotate(var(--rot, 0deg));
+      visibility: hidden;          /* nähtavaks alles plahvatuse hetkel */
+      pointer-events: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .polaroid.naha { visibility: visible; }
+    .polaroid.maandunud { pointer-events: auto; }
+    .polaroid.tagasi { pointer-events: none; }
+    .polaroid:focus-visible { outline: 3px solid #fff; outline-offset: 6px; }
+
+    /* neli nurka, igaüks kergelt viltu */
+    .p1 { left: max(3vw, 18px);  top: max(3vh, 18px);    --rot: -7deg; }
+    .p2 { right: max(3vw, 18px); top: max(3vh, 18px);    --rot: 6deg;  }
+    .p3 { left: max(3vw, 18px);  bottom: max(3vh, 18px); --rot: 5deg;  }
+    .p4 { right: max(3vw, 18px); bottom: max(3vh, 18px); --rot: -5deg; }
+
+    /* aeglane hõljumine pärast maandumist */
+    .holjub { display: block; }
+    .maandunud .holjub {
+      animation: hoida var(--t, 6s) ease-in-out infinite alternate;
+    }
+    @keyframes hoida {
+      from { transform: translate(0, 0) rotate(0deg); }
+      to   { transform: translate(var(--dx, 0px), var(--dy, -10px)) rotate(var(--dr, 1.5deg)); }
+    }
+
+    /* valge polaroidi äär: paksem all, seal on käekirjas allkiri */
+    .raam {
+      position: relative;
+      display: block;
+      box-sizing: border-box;
+      width: 100%;
+      padding: 5% 5% 0;
+      background: #fff;
+      box-shadow: 0 10px 24px rgba(15, 10, 40, 0.4), 0 2px 4px rgba(0, 0, 0, 0.25);
+      transition: box-shadow 0.2s ease;
+      container-type: inline-size;
+    }
+    .maandunud:hover .raam {
+      box-shadow: 0 14px 30px rgba(15, 10, 40, 0.5), 0 2px 4px rgba(0, 0, 0, 0.25);
+    }
+    .raam img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      background: #ddd;
+    }
+    .pildi-allkiri {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 20cqw;
+      padding: 1cqw 1cqw 3cqw;
+      font-family: 'Caveat', 'Segoe Script', 'Bradley Hand', cursive;
+      font-weight: 700;
+      font-size: 1rem;
+      font-size: 12.5cqw;          /* ~14 px telefonil, ~24 px arvutis */
+      line-height: 0.95;
+      text-align: center;
+      text-wrap: balance;
+      color: #3a2a22;
+    }
+
+    /* Pildilt välja lendavad vuntsid */
+    #vuntsid {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .vunts {
+      position: absolute;
+      left: 0;
+      top: 0;
+      will-change: transform, opacity;
+    }
+    .vunts svg { display: block; width: 100%; height: auto; }
+
+    /* ===== Paberikaart plahvatuse järel ===== */
+    #paberikiht {
+      position: fixed;
+      inset: 0;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .paber {
+      box-sizing: border-box;
+      width: min(86vw, 460px);
+      max-height: 88vh;
+      overflow: auto;
+      padding: clamp(1.2rem, 4vw, 2rem) clamp(1.2rem, 5vw, 2.4rem);
+      background: linear-gradient(#fffdf6, #f8efd8);
+      border-radius: 4px;
+      box-shadow: 0 18px 40px rgba(15, 10, 40, 0.5), 0 2px 6px rgba(0, 0, 0, 0.25);
+      pointer-events: auto;
+      /* peidus olek */
+      visibility: hidden;
+      opacity: 0;
+      transform: scale(0.4) rotate(-10deg);
+      transition: transform 0.45s ease-in, opacity 0.35s ease, visibility 0s linear 0.45s;
+    }
+    .paber.nahtav {
+      visibility: visible;
+      opacity: 1;
+      transform: scale(1) rotate(-1.5deg);
+      transition: transform 0.7s cubic-bezier(.2, 1.25, .35, 1), opacity 0.35s ease, visibility 0s;
+    }
+    .paber h2 {
+      margin: 0 0 0.4rem;
+      font-family: 'Caveat', 'Segoe Script', 'Bradley Hand', cursive;
+      font-weight: 700;
+      font-size: clamp(2.4rem, 8vw, 3.6rem);
+      line-height: 1.05;
+      text-align: center;
+      overflow-wrap: anywhere;     /* pikk nimi murdub, ei aja kaarti laiemaks */
+      color: #5a3a2a;
+    }
+    .paber .tekst {
+      margin: 0 0 1rem;
+      font-family: 'Caveat', 'Segoe Script', 'Bradley Hand', cursive;
+      font-weight: 600;
+      font-size: clamp(1.7rem, 5.5vw, 2.4rem);
+      line-height: 1.15;
+      text-align: center;
+      white-space: pre-line;
+      color: #4a3328;
+    }
+    .paber .allkiri {
+      margin: 0 0.4em 1.2rem 0;
+      font-family: 'Caveat', 'Segoe Script', 'Bradley Hand', cursive;
+      font-weight: 700;
+      font-size: clamp(2rem, 6vw, 2.8rem);
+      line-height: 1;
+      text-align: right;
+      color: #8a3a2a;
+      transform: rotate(-3deg);
+    }
+    .tagasi-nupp {
+      display: block;
+      margin: 0 auto;
+      padding: 0.7em 1.4em;
+      border: 0;
+      border-radius: 999px;
+      background: #b8322a;
+      color: #fff;
+      font: 600 1rem/1.2 system-ui, 'Segoe UI', sans-serif;
+      cursor: pointer;
+      box-shadow: 0 3px 8px rgba(120, 30, 20, 0.4);
+      transition: background 0.2s ease, transform 0.15s ease;
+    }
+    .tagasi-nupp:hover { background: #cf3d33; transform: translateY(-1px); }
+    .tagasi-nupp:active { transform: translateY(1px); }
+    .tagasi-nupp:focus-visible { outline: 3px solid #5a3a2a; outline-offset: 3px; }
+
+    /* ===== Boonustekst (ilmub keskele, kui pilte on piisavalt klõpsatud) ===== */
+    .boonus {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      z-index: 6;
+      box-sizing: border-box;
+      width: min(82vw, 400px);
+      padding: 1rem 1.3rem;
+      border-radius: 18px;
+      background: #fff1b8;
+      color: #6b3a12;
+      font-family: 'Caveat', 'Segoe Script', 'Bradley Hand', cursive;
+      font-weight: 700;
+      font-size: clamp(1.9rem, 7vw, 2.6rem);
+      line-height: 1.1;
+      text-align: center;
+      box-shadow: 0 16px 36px rgba(15, 10, 40, 0.5), 0 0 0 4px rgba(255, 255, 255, 0.7);
+      pointer-events: none;
+      visibility: hidden;
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.4) rotate(6deg);
+      transition: transform 0.35s ease-in, opacity 0.35s ease, visibility 0s linear 0.35s;
+    }
+    .boonus.nahtav {
+      visibility: visible;
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1) rotate(-2deg);
+      transition: transform 0.6s cubic-bezier(.2, 1.4, .35, 1), opacity 0.3s ease, visibility 0s;
+    }
+
+    /* ===== Heli sisse/välja nupp (parem ülanurk) ===== */
+    .heli-nupp {
+      position: fixed;
+      top: calc(8px + env(safe-area-inset-top, 0px));
+      right: calc(8px + env(safe-area-inset-right, 0px));
+      z-index: 7;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      background: rgba(25, 18, 55, 0.55);
+      color: #fff;
+      cursor: pointer;
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.2s ease, transform 0.15s ease;
+    }
+    .heli-nupp[hidden] { display: none; }
+    .heli-nupp:hover { background: rgba(25, 18, 55, 0.75); }
+    .heli-nupp:active { transform: scale(0.94); }
+    .heli-nupp:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+    .heli-nupp svg { display: block; }
+    .heli-nupp .rist { display: none; }
+    .heli-nupp.vaigistatud .lained { display: none; }
+    .heli-nupp.vaigistatud .rist { display: inline; }
+
+    /* Madal püstine ekraan (nt 568 px): kaart veidi kompaktsem */
+    @media (max-height: 640px) and (orientation: portrait) {
+      .paber { padding: 0.9rem 1.1rem; }
+      .paber h2 { font-size: 2.1rem; }
+      .paber .tekst { font-size: 1.5rem; margin-bottom: 0.6rem; }
+      .paber .allkiri { font-size: 1.7rem; margin-bottom: 0.7rem; }
+    }
+
+    /* Rõhtasendis telefon: kaart jääb piltide vahele */
+    @media (orientation: landscape) and (max-height: 520px) {
+      .paber {
+        width: min(86vw, 460px, calc(100vw - 2 * var(--foto) - 110px));
+        padding: 0.8rem 1rem;
+      }
+      .paber h2 { font-size: 2rem; }
+      .paber .tekst { font-size: 1.5rem; margin-bottom: 0.5rem; }
+      .paber .allkiri { font-size: 1.7rem; margin-bottom: 0.6rem; }
+    }
+
+    /* "Vähenda liikumist": raputus, hõljumine ja hüplemine ära */
+    @media (prefers-reduced-motion: reduce) {
+      #ymbrik.raputab, #ymbrik.tagasitulek { animation: none; }
+      #kaart { animation: none; }
+      #ymbrik, .kiri, .klapp { transition-duration: 0.01s; transition-delay: 0s; }
+      .maandunud .holjub { animation: none; }
+      .paber, .paber.nahtav, .boonus, .boonus.nahtav { transition-duration: 0.01s; }
+    }
+  </style>
+</head>
+<body>
+  <!-- p5.js joonistab tausta siia -->
+  <div id="taust"></div>
+
+  <!-- Tekst ja ümbrik -->
+  <main id="kaart">
+    <h1 class="tervitus" id="tervitus"></h1>
+
+    <button id="ymbrik" type="button" aria-label="Ava ümbrik">
+      <span class="tagak"></span>
+      <span class="kiri" id="piilumaKiri"></span>
+      <span class="esi-vasak"></span>
+      <span class="esi-parem"></span>
+      <span class="esi-alumine"></span>
+      <span class="klapp"></span>
+      <span class="pitsat" aria-hidden="true">♥</span>
+    </button>
+  </main>
+
+  <!-- Polaroidid luuakse skriptis seadete põhjal -->
+  <div id="polaroidid"></div>
+
+  <!-- Paberikaart, mis ilmub plahvatuse järel -->
+  <div id="paberikiht">
+    <section class="paber" id="paber" aria-live="polite">
+      <h2 id="paberPealkiri"></h2>
+      <p class="tekst" id="paberTekst"></p>
+      <p class="allkiri" id="paberAllkiri"></p>
+      <button class="tagasi-nupp" id="tagasiNupp" type="button"></button>
+    </section>
+  </div>
+
+  <canvas id="konfetti"></canvas>
+  <div id="vuntsid"></div>
+
+  <!-- Boonustekst (ilmub keskele pärast piisavat arvu pildiklõpse) -->
+  <div class="boonus" id="boonus" role="status" aria-live="polite"></div>
+
+  <!-- Heli sisse/välja (viimane tabeldamisel) -->
+  <button class="heli-nupp" id="heliNupp" type="button"
+          aria-label="Lülita heli välja" title="Lülita heli välja">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor"/>
+      <path class="lained" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>
+      <path class="rist" d="M16 9l5 6M21 9l-5 6"/>
+    </svg>
+  </button>
+
+  <script src="sketch.js"></script>
+  <script>
+    // =====================================================
+    //  SEADED – siin saad kõike ise muuta
+    // =====================================================
+    const SEADED = {
+      // Tekst ümbriku kohal ja kiri, mis ümbrikust välja piilub
+      ymbrik: {
+        tervitus: 'Sulle on kiri!',
+        piilumaKiri: 'Head meestepäeva!'
+      },
+
+      // Boonus: kui pilte on kokku nii mitu korda klõpsatud, sajab südameid
+      // ja keskele ilmub lisatekst (ilmub ühe korra iga kaardi avamise kohta)
+      boonus: {
+        klikke: 5,
+        tekst: 'Oled ühe õlle välja teeninud!'
+      },
+
+      // Heli: true = plahvatusel mängib rõõmus kõlaheli (ja nurgas on vaigistusnupp),
+      // false = heli ja nupp puuduvad. Heli mängib alles pärast kasutaja klõpsu.
+      heli: true,
+
+      // Paberikaart, mis ilmub pärast plahvatust
+      kaart: {
+        pealkiri: 'Tere, Sõber!',                 // kasutatakse, kui lingis nime pole
+        pealkiriNimega: 'Tere, {nimi}!',          // kasutatakse lingiga index.html?nimi=Mari ({nimi} asendub nimega)
+        tekst: 'Head meestepäeva!',      // reavahetuseks kasuta \n
+        allkiri: 'Kristi',
+        tagasiNupp: 'Pane kiri tagasi ümbrikusse'
+      },
+
+      // Neli polaroidi (vasak ülemine, parem ülemine, vasak alumine, parem alumine).
+      // fail = pildi tee, allkiri = käekirjas tekst pildi all,
+      // alt (pole kohustuslik) = pildi kirjeldus ekraanilugejale; vaikimisi sama mis allkiri
+      pildid: [
+        { fail: 'Pildid/1_vuntsid_ja_kikilips.png',  allkiri: 'Vuntsid ja kikilips' },
+        { fail: 'Pildid/2_vuntsiskaala.png',         allkiri: 'Vuntsiskaala' },
+        { fail: 'Pildid/3_pult_vuntsidega.png',      allkiri: 'Pult vuntsidega' },
+        { fail: 'Pildid/4_grilli_harrasmees.png',    allkiri: 'Grilli härrasmees' }
+      ]
+    };
+
+    // =====================================================
+    //  Siit allapoole pole tavaliselt vaja muuta
+    // =====================================================
+    (function () {
+      'use strict';
+
+      const ymbrik = document.getElementById('ymbrik');
+      const kaart = document.getElementById('kaart');
+      const paber = document.getElementById('paber');
+      const tagasiNupp = document.getElementById('tagasiNupp');
+      const polaroidiKiht = document.getElementById('polaroidid');
+      const vuntsideKiht = document.getElementById('vuntsid');
+      // "Vähenda liikumist" süsteemiseade (jälgib ka muutumist lehe avatuna olles)
+      const liikumiseSeade = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let vahem = liikumiseSeade.matches;
+      liikumiseSeade.addEventListener('change', function (ev) { vahem = ev.matches; });
+
+      // Muudab sketch.js globaalset muutujat `elavus` (0 = rahulik, 1 = elav).
+      // Sketch ise teeb üleminekud sujuvaks.
+      function taustElav(vaartus) {
+        if (typeof elavus !== 'undefined') elavus = vaartus;
+      }
+
+      const uni = (ms) => new Promise((r) => setTimeout(r, ms));
+      const rnd = (a, b) => a + Math.random() * (b - a);
+
+      // ---- tekstid seadetest lehele ----
+      document.getElementById('tervitus').textContent = SEADED.ymbrik.tervitus;
+      document.getElementById('piilumaKiri').textContent = SEADED.ymbrik.piilumaKiri;
+      // Nimi aadressireal: index.html?nimi=Mari  →  "Tere, Mari!"
+      // Kui nime pole (või see on tühi), jääb vaikimisi pealkiri.
+      // Nimi lisatakse tavalise tekstina, nii et lingiga ei saa lehele koodi lisada.
+      function nimiAadressirealt() {
+        try {
+          const toor = new URLSearchParams(window.location.search).get('nimi') || '';
+          return toor.replace(/\s+/g, ' ').trim().slice(0, 40);
+        } catch (viga) {
+          return '';
+        }
+      }
+      const nimi = nimiAadressirealt();
+      document.getElementById('paberPealkiri').textContent = nimi
+        ? SEADED.kaart.pealkiriNimega.replace('{nimi}', function () { return nimi; })
+        : SEADED.kaart.pealkiri;
+      document.getElementById('paberTekst').textContent = SEADED.kaart.tekst;
+      document.getElementById('paberAllkiri').textContent = SEADED.kaart.allkiri;
+      tagasiNupp.textContent = SEADED.kaart.tagasiNupp;
+
+      // ---- polaroidid seadetest ----
+      const HOLJUMINE = [
+        { dx: '6px',  dy: '-11px', dr: '1.6deg',  t: '6.2s' },
+        { dx: '-7px', dy: '-9px',  dr: '-1.4deg', t: '7s'   },
+        { dx: '5px',  dy: '10px',  dr: '-1.8deg', t: '6.6s' },
+        { dx: '-6px', dy: '11px',  dr: '1.5deg',  t: '7.4s' }
+      ];
+
+      SEADED.pildid.slice(0, 4).forEach(function (p, i) {
+        const nupp = document.createElement('button');
+        nupp.type = 'button';
+        nupp.className = 'polaroid p' + (i + 1);
+        nupp.setAttribute('aria-label', 'Pilt: ' + p.allkiri);
+
+        const holjub = document.createElement('span');
+        holjub.className = 'holjub';
+        const h = HOLJUMINE[i];
+        holjub.style.setProperty('--dx', h.dx);
+        holjub.style.setProperty('--dy', h.dy);
+        holjub.style.setProperty('--dr', h.dr);
+        holjub.style.setProperty('--t', h.t);
+
+        const raam = document.createElement('span');
+        raam.className = 'raam';
+
+        const pilt = document.createElement('img');
+        pilt.src = p.fail;
+        pilt.alt = p.alt || p.allkiri;   // alt-tekst: vaikimisi sama mis allkiri
+        pilt.decoding = 'async';
+
+        const allkiri = document.createElement('span');
+        allkiri.className = 'pildi-allkiri';
+        allkiri.textContent = p.allkiri;
+
+        raam.appendChild(pilt);
+        raam.appendChild(allkiri);
+        holjub.appendChild(raam);
+        nupp.appendChild(holjub);
+        polaroidiKiht.appendChild(nupp);
+
+        nupp.addEventListener('click', function () {
+          hupa(nupp);
+          loeKlikk();
+        });
+      });
+
+      const polaroidid = Array.from(polaroidiKiht.querySelectorAll('.polaroid'));
+
+      // =====================================================
+      //  KONFETI (oma lahendus, ilma lisateegita)
+      // =====================================================
+      const kc = document.getElementById('konfetti');
+      const kx = kc.getContext('2d');
+      const KONFETI_VARVID = ['#f2c94c', '#e8514a', '#3fa7d6', '#59cd90', '#ee6c4d',
+                              '#ffffff', '#b8322a', '#9b6bd6'];
+      const PABERI_VARVID = ['#f2e0b8', '#dcc28f', '#ecd7a8']; // ümbriku paberitükid
+      let osakesed = [];
+      let konfetiKaib = false;
+      let viimaneAeg = 0;
+
+      function konfetiSuurus() {
+        const d = Math.min(window.devicePixelRatio || 1, 2);
+        kc.width = Math.round(window.innerWidth * d);
+        kc.height = Math.round(window.innerHeight * d);
+        kx.setTransform(d, 0, 0, d, 0, 0);
+      }
+      konfetiSuurus();
+      window.addEventListener('resize', konfetiSuurus);
+
+      function konfetiPurse(x, y, arv, kiirus, paberit) {
+        for (let i = 0; i < arv; i++) {
+          const nurk = Math.random() * Math.PI * 2;
+          const v = rnd(4, 17) * kiirus;
+          const suur = paberit && i < paberit;
+          osakesed.push({
+            x: x, y: y,
+            vx: Math.cos(nurk) * v,
+            vy: Math.sin(nurk) * v - 3,
+            w: suur ? rnd(14, 28) : rnd(6, 13),
+            h: suur ? rnd(10, 18) : rnd(4, 9),
+            rot: rnd(0, Math.PI * 2),
+            vr: rnd(-0.25, 0.25),
+            flip: rnd(0, Math.PI * 2),
+            vf: rnd(0.08, 0.3),
+            varv: suur
+              ? PABERI_VARVID[(Math.random() * PABERI_VARVID.length) | 0]
+              : KONFETI_VARVID[(Math.random() * KONFETI_VARVID.length) | 0],
+            elu: 0,
+            kestus: rnd(2.8, 4.6)
+          });
+        }
+        kaivitaKonfeti();
+      }
+
+      function kaivitaKonfeti() {
+        if (!konfetiKaib) {
+          konfetiKaib = true;
+          viimaneAeg = performance.now();
+          requestAnimationFrame(konfetiKaader);
+        }
+      }
+
+      // Üks väike süda (laius ~ s), joonistatakse punktis (0, 0)
+      function joonistaSuda(s) {
+        kx.beginPath();
+        kx.moveTo(0, 0.35 * s);
+        kx.bezierCurveTo(-0.5 * s, 0, -0.55 * s, -0.45 * s, -0.28 * s, -0.5 * s);
+        kx.bezierCurveTo(-0.12 * s, -0.53 * s, 0, -0.42 * s, 0, -0.3 * s);
+        kx.bezierCurveTo(0, -0.42 * s, 0.12 * s, -0.53 * s, 0.28 * s, -0.5 * s);
+        kx.bezierCurveTo(0.55 * s, -0.45 * s, 0.5 * s, 0, 0, 0.35 * s);
+        kx.closePath();
+        kx.fill();
+      }
+
+      // Südamed sajavad ülevalt alla (a = mitu südant korraga)
+      const SUDAME_VARVID = ['#e8514a', '#ff6b81', '#ff8fa3', '#d6336c', '#ff4d6d', '#ffb3c1'];
+      function sudamedSajavad(arv) {
+        for (let i = 0; i < arv; i++) {
+          osakesed.push({
+            sud: true,
+            x: rnd(0, window.innerWidth),
+            y: rnd(-40, -10),
+            vx: rnd(-0.3, 0.3),
+            vy: rnd(1.8, 4.2),
+            w: rnd(10, 26),
+            rot: 0,
+            vr: rnd(-0.02, 0.02),
+            sagedus: rnd(1.5, 3),
+            faas: rnd(0, Math.PI * 2),
+            varv: SUDAME_VARVID[(Math.random() * SUDAME_VARVID.length) | 0],
+            elu: 0,
+            kestus: 20
+          });
+        }
+        kaivitaKonfeti();
+      }
+
+      function konfetiKaader(praegu) {
+        const dt = Math.min((praegu - viimaneAeg) / 1000, 0.05);
+        viimaneAeg = praegu;
+        const f = dt * 60; // normaliseeritud 60 kaadrile sekundis
+
+        kx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        const hoordumine = Math.pow(0.985, f);
+
+        for (let i = osakesed.length - 1; i >= 0; i--) {
+          const o = osakesed[i];
+          o.elu += dt;
+          if (o.sud) {
+            // süda: ühtlane langemine, kerge kõikumine küljelt küljele
+            o.x += (o.vx + Math.sin(o.elu * o.sagedus + o.faas) * 0.7) * f;
+            o.y += o.vy * f;
+            o.rot = Math.sin(o.elu * o.sagedus + o.faas) * 0.35;
+          } else {
+            o.vx *= hoordumine;
+            o.vy = o.vy * hoordumine + 0.22 * f;
+            o.x += o.vx * f;
+            o.y += o.vy * f;
+            o.rot += o.vr * f;
+            o.flip += o.vf * f;
+          }
+
+          const jaanud = o.kestus - o.elu;
+          if (jaanud <= 0 || o.y > window.innerHeight + 40) {
+            osakesed.splice(i, 1);
+            continue;
+          }
+          kx.globalAlpha = jaanud < 0.8 ? jaanud / 0.8 : 1;
+          kx.save();
+          kx.translate(o.x, o.y);
+          kx.rotate(o.rot);
+          kx.fillStyle = o.varv;
+          if (o.sud) {
+            joonistaSuda(o.w);
+          } else {
+            kx.scale(1, Math.cos(o.flip)); // "pöörleb" õhus
+            kx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+          }
+          kx.restore();
+        }
+        kx.globalAlpha = 1;
+
+        if (osakesed.length > 0) {
+          requestAnimationFrame(konfetiKaader);
+        } else {
+          kx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+          konfetiKaib = false;
+        }
+      }
+
+      // =====================================================
+      //  POLAROIDIDE LENNUTAMINE ÜMBRIKU KOHAST NURKADESSE
+      // =====================================================
+      function lennuta(el, algusX, algusY, viivitus) {
+        const rot = parseFloat(getComputedStyle(el).getPropertyValue('--rot')) || 0;
+        const r = el.getBoundingClientRect();
+        const dx = algusX - (r.left + r.width / 2);
+        const dy = algusY - (r.top + r.height / 2);
+
+        el.classList.add('naha');
+        const anim = el.animate([
+          { transform: 'translate(' + dx + 'px,' + dy + 'px) rotate(' + (rot * 5) + 'deg) scale(0.15)', opacity: 0 },
+          { opacity: 1, offset: 0.15 },
+          { transform: 'translate(0px,0px) rotate(' + rot + 'deg) scale(1)', opacity: 1 }
+        ], {
+          duration: vahem ? 200 : 1200,
+          delay: viivitus,
+          easing: 'cubic-bezier(.2, .9, .3, 1.12)',
+          fill: 'backwards'
+        });
+        anim.onfinish = function () {
+          el.classList.add('maandunud'); // alustab hõljumist, muutub klõpsatavaks
+        };
+      }
+
+      // Tagasipanek: pilt lendab tagasi ümbriku kohale ja kaob
+      function lennutaTagasi(el, siht) {
+        const rot = parseFloat(getComputedStyle(el).getPropertyValue('--rot')) || 0;
+        const r = el.getBoundingClientRect();
+        const dx = siht.x - (r.left + r.width / 2);
+        const dy = siht.y - (r.top + r.height / 2);
+
+        el.classList.add('tagasi');
+        const anim = el.animate([
+          { transform: 'translate(0px,0px) rotate(' + rot + 'deg) scale(1)', opacity: 1 },
+          { transform: 'translate(' + dx + 'px,' + dy + 'px) rotate(' + (rot * 5) + 'deg) scale(0.15)', opacity: 0 }
+        ], {
+          duration: vahem ? 100 : 700,
+          easing: 'cubic-bezier(.5, 0, .8, .4)',
+          fill: 'forwards'
+        });
+        return new Promise(function (valmis) {
+          anim.onfinish = function () {
+            el.classList.remove('naha', 'maandunud', 'tagasi');
+            anim.cancel();
+            valmis();
+          };
+        });
+      }
+
+      // =====================================================
+      //  VUNTSID, MIS PILDILT VÄLJA LENDAVAD
+      // =====================================================
+      const VUNTSI_TEE =
+        'M 0 -8 C 30 -48, 95 -48, 140 -16 C 170 4, 205 0, 220 -36 ' +
+        'C 228 -58, 210 -72, 196 -60 C 214 -50, 210 -28, 194 -24 ' +
+        'C 176 26, 110 48, 60 32 C 30 24, 10 16, 0 22 Z';
+      const VUNTSI_VARVID = ['#2b1a12', '#3d2417', '#5a3a2a'];
+
+      function looVunts(laius) {
+        const el = document.createElement('div');
+        el.className = 'vunts';
+        el.style.width = laius + 'px';
+        const varv = VUNTSI_VARVID[(Math.random() * VUNTSI_VARVID.length) | 0];
+        el.innerHTML =
+          '<svg viewBox="-235 -75 470 130" aria-hidden="true"><g fill="' + varv + '">' +
+          '<path d="' + VUNTSI_TEE + '"/>' +
+          '<path d="' + VUNTSI_TEE + '" transform="scale(-1 1)"/></g></svg>';
+        return el;
+      }
+
+      function hupa(nupp) {
+        // pilt hüppab
+        const raam = nupp.querySelector('.raam');
+        raam.animate([
+          { transform: 'translateY(0) scale(1, 1) rotate(0deg)' },
+          { transform: 'translateY(-8px) scale(0.96, 1.05)', offset: 0.15 },
+          { transform: 'translateY(-32px) scale(1.06) rotate(-4deg)', offset: 0.45 },
+          { transform: 'translateY(0) scale(1.05, 0.94)', offset: 0.75 },
+          { transform: 'translateY(-8px) scale(1) rotate(1deg)', offset: 0.88 },
+          { transform: 'translateY(0) scale(1) rotate(0deg)' }
+        ], { duration: 700, easing: 'ease-out' });
+
+        // vuntsid lendavad pildi keskelt laiali
+        const r = nupp.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const arv = vahem ? 4 : 10;
+
+        for (let i = 0; i < arv; i++) {
+          const w = rnd(34, 62);
+          const h = w * (130 / 470);
+          const el = looVunts(w);
+          vuntsideKiht.appendChild(el);
+
+          const nurk = rnd(0, Math.PI * 2);
+          const kaugus = rnd(90, 230);
+          const x0 = cx - w / 2;
+          const y0 = cy - h / 2;
+          const x1 = x0 + Math.cos(nurk) * kaugus;
+          const y1 = y0 + Math.sin(nurk) * kaugus;
+          const pooramine = rnd(-360, 360);
+
+          const a = el.animate([
+            { transform: 'translate(' + x0 + 'px,' + y0 + 'px) scale(0.3) rotate(0deg)', opacity: 1 },
+            { transform: 'translate(' + x1 + 'px,' + y1 + 'px) scale(1) rotate(' + (pooramine * 0.6) + 'deg)', opacity: 1, offset: 0.55 },
+            { transform: 'translate(' + x1 + 'px,' + (y1 + 70) + 'px) scale(0.9) rotate(' + pooramine + 'deg)', opacity: 0 }
+          ], {
+            duration: rnd(1000, 1500),
+            easing: 'cubic-bezier(.2, .8, .3, 1)',
+            fill: 'forwards'
+          });
+          a.onfinish = function () { el.remove(); };
+        }
+      }
+
+      // =====================================================
+      //  BONUS: piisavalt pildiklõpse → südameid sajab + lisatekst keskele
+      // =====================================================
+      const boonusKiht = document.getElementById('boonus');
+      let pildiKlikke = 0;
+      let boonusKaivitatud = false;
+      let boonusTaimerid = [];
+
+      function loeKlikk() {
+        pildiKlikke++;
+        const vajalik = (SEADED.boonus && SEADED.boonus.klikke) || 5;
+        if (!boonusKaivitatud && pildiKlikke >= vajalik) {
+          boonusKaivitatud = true;
+          kaivitaBoonus();
+        }
+      }
+
+      function kaivitaBoonus() {
+        // lisatekst keskele (kaob mõne sekundi pärast ise)
+        boonusKiht.textContent = (SEADED.boonus && SEADED.boonus.tekst) || '';
+        boonusKiht.classList.add('nahtav');
+        boonusTaimerid.push(setTimeout(function () {
+          boonusKiht.classList.remove('nahtav');
+        }, 6000));
+
+        // südamevihm: ~120 südant 2,6 sekundi jooksul ("vähenda liikumist": vihma pole)
+        if (!vahem) {
+          for (let i = 0; i < 24; i++) {
+            boonusTaimerid.push(setTimeout(function () { sudamedSajavad(5); }, i * 110));
+          }
+        }
+      }
+
+      function peataBoonus() {
+        boonusTaimerid.forEach(clearTimeout);
+        boonusTaimerid = [];
+        boonusKiht.classList.remove('nahtav');
+        pildiKlikke = 0;
+        boonusKaivitatud = false;
+      }
+
+      // =====================================================
+      //  HELI (Web Audio API, ilma helifailita)
+      //  AudioContext luuakse alles ümbriku klõpsu sees – brauserid
+      //  ei luba heli enne kasutaja tegevust.
+      // =====================================================
+      const heliNupp = document.getElementById('heliNupp');
+      const heli = (function () {
+        const PEAMINE_TUGEVUS = 0.8;
+        let ctx = null;
+        let master = null;
+        let sees = true;
+
+        function valmista() {
+          if (!SEADED.heli) return;
+          try {
+            if (!ctx) {
+              const AC = window.AudioContext || window.webkitAudioContext;
+              if (!AC) return;
+              ctx = new AC();
+              master = ctx.createGain();
+              master.gain.value = sees ? PEAMINE_TUGEVUS : 0;
+              master.connect(ctx.destination);
+            }
+            if (ctx.state === 'suspended') ctx.resume();
+          } catch (viga) {
+            ctx = null;
+          }
+        }
+
+        // üks kellataoline noot: kiire tõus, aeglane vaibumine
+        function noot(sagedus, algus, kestus, tugevus, tuup) {
+          const o = ctx.createOscillator();
+          const g = ctx.createGain();
+          o.type = tuup;
+          o.frequency.value = sagedus;
+          g.gain.setValueAtTime(0.0001, algus);
+          g.gain.exponentialRampToValueAtTime(tugevus, algus + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, algus + kestus);
+          o.connect(g);
+          g.connect(master);
+          o.start(algus);
+          o.stop(algus + kestus + 0.05);
+        }
+
+        function plahvatus() {
+          if (!SEADED.heli || !ctx || !sees) return;
+          try {
+            if (ctx.state === 'suspended') ctx.resume();
+            const t0 = ctx.currentTime + 0.02;
+
+            // 1) pehme "pop": filtreeritud müra
+            const pikkus = Math.floor(ctx.sampleRate * 0.25);
+            const puhver = ctx.createBuffer(1, pikkus, ctx.sampleRate);
+            const andmed = puhver.getChannelData(0);
+            for (let i = 0; i < pikkus; i++) {
+              andmed[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / pikkus, 2);
+            }
+            const mura = ctx.createBufferSource();
+            mura.buffer = puhver;
+            const filter = ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(2500, t0);
+            filter.frequency.exponentialRampToValueAtTime(300, t0 + 0.2);
+            const muraG = ctx.createGain();
+            muraG.gain.value = 0.5;
+            mura.connect(filter);
+            filter.connect(muraG);
+            muraG.connect(master);
+            mura.start(t0);
+
+            // 2) madal "bump", mis langeb kiiresti
+            const bump = ctx.createOscillator();
+            const bumpG = ctx.createGain();
+            bump.type = 'sine';
+            bump.frequency.setValueAtTime(170, t0);
+            bump.frequency.exponentialRampToValueAtTime(45, t0 + 0.18);
+            bumpG.gain.setValueAtTime(0.5, t0);
+            bumpG.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+            bump.connect(bumpG);
+            bumpG.connect(master);
+            bump.start(t0);
+            bump.stop(t0 + 0.25);
+
+            // 3) rõõmus C-duur kõlaarpeggio (C5 E5 G5 C6 E6) kellalise ülahelinaga
+            [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) {
+              const t = t0 + 0.05 + i * 0.075;
+              noot(f, t, 1.1, 0.2, 'triangle');
+              noot(f * 2, t, 0.6, 0.06, 'sine');
+            });
+
+            // 4) paar säravat tippheli lõpus
+            [2093, 2637, 3136].forEach(function (f, i) {
+              noot(f, t0 + 0.45 + i * 0.08, 0.35, 0.045, 'sine');
+            });
+          } catch (viga) { /* heli on tore lisa, mitte vajalik */ }
+        }
+
+        function seaSees(vaartus) {
+          sees = vaartus;
+          if (master) master.gain.setTargetAtTime(vaartus ? PEAMINE_TUGEVUS : 0, ctx.currentTime, 0.02);
+        }
+
+        return { valmista: valmista, plahvatus: plahvatus, seaSees: seaSees, get sees() { return sees; } };
+      })();
+
+      // Nurgas olev nupp heli välja/sisse lülitamiseks
+      if (!SEADED.heli) {
+        heliNupp.hidden = true;
+      }
+      heliNupp.addEventListener('click', function () {
+        const uusSees = !heli.sees;
+        heli.seaSees(uusSees);
+        heliNupp.classList.toggle('vaigistatud', !uusSees);
+        const silt = uusSees ? 'Lülita heli välja' : 'Lülita heli sisse';
+        heliNupp.setAttribute('aria-label', silt);
+        heliNupp.title = silt;
+        if (uusSees) heli.valmista(); // klõps on kasutaja tegevus, heli tohib käivituda
+      });
+
+      // =====================================================
+      //  ÜMBRIKU KLÕPS: raputus → klapp ja kiri → plahvatus → pildid ja kaart
+      // =====================================================
+      let kaib = false;
+      ymbrik.addEventListener('click', async function () {
+        if (kaib) return;
+        kaib = true;
+        ymbrik.setAttribute('aria-disabled', 'true');
+        heli.valmista(); // heli lubatakse alles kasutaja klõpsu sees
+
+        // 1. ümbrik raputab end
+        if (!vahem) {
+          ymbrik.classList.add('raputab');
+          await uni(800);
+          ymbrik.classList.remove('raputab');
+        }
+
+        // 2. klapp avaneb, kiri piilub välja – taust muutub elavaks
+        ymbrik.classList.add('lahti');
+        kaart.classList.add('lahti');
+        taustElav(1);
+        await uni(vahem ? 300 : 1300);
+
+        // 3. ümbrik plahvatab konfetiks
+        const r = ymbrik.getBoundingClientRect();
+        const ox = r.left + r.width / 2;
+        const oy = r.top + r.height / 2;
+        ymbrik.classList.add('plahvatas');
+        heli.plahvatus();
+
+        const hulk = vahem ? 1 : 3;
+        konfetiPurse(ox, oy, 70 * hulk, 1, 16);
+        setTimeout(function () { konfetiPurse(ox, oy, 50 * hulk, 0.8, 0); }, 180);
+        setTimeout(function () { konfetiPurse(ox, oy, 40 * hulk, 0.6, 0); }, 420);
+
+        // 4. plahvatusest lendavad välja neli pilti
+        polaroidid.forEach(function (el, i) {
+          lennuta(el, ox, oy, vahem ? 0 : i * 90);
+        });
+
+        await uni(400);
+        kaart.style.display = 'none';
+
+        // 5. keskele ilmub paberikaart
+        await uni(vahem ? 0 : 300);
+        paber.classList.add('nahtav');
+        await uni(vahem ? 50 : 750);
+        tagasiNupp.focus({ preventScroll: true });
+      });
+
+      // =====================================================
+      //  "PANE KIRI TAGASI ÜMBRIKUSSE": kõik algusesse tagasi
+      // =====================================================
+      let tagasiKaib = false;
+      tagasiNupp.addEventListener('click', async function () {
+        if (tagasiKaib) return;
+        tagasiKaib = true;
+
+        // kaart kaob ja taust rahuneb uuesti
+        peataBoonus();
+        paber.classList.remove('nahtav');
+        taustElav(0);
+
+        // ümbrik seatakse algseisu, aga hoitakse veel nähtamatuna,
+        // et teada saada, kuhu pildid tagasi lendama peavad
+        ymbrik.classList.remove('plahvatas', 'lahti', 'raputab');
+        kaart.classList.remove('lahti');
+        kaart.style.display = '';
+        kaart.style.visibility = 'hidden';
+        const r = ymbrik.getBoundingClientRect();
+        const siht = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+
+        // pildid lendavad ümbrikusse tagasi
+        await Promise.all(polaroidid.map(function (el) { return lennutaTagasi(el, siht); }));
+
+        // jäägid minema
+        osakesed.length = 0;
+        vuntsideKiht.innerHTML = '';
+
+        // ümbrik ilmub uuesti, suletud
+        kaart.style.visibility = '';
+        ymbrik.classList.add('tagasitulek');
+        await uni(vahem ? 50 : 600);
+        ymbrik.classList.remove('tagasitulek');
+        ymbrik.removeAttribute('aria-disabled');
+        kaib = false;
+        tagasiKaib = false;
+        ymbrik.focus({ preventScroll: true });
+      });
+    })();
+  </script>
+</body>
+</html>
